@@ -33,16 +33,14 @@
 #include "test_servicemanager_hidl.h"
 
 #include "gbinder_local_object_p.h"
-#include "gbinder_local_object_p.h"
 #include "gbinder_local_reply.h"
 #include "gbinder_local_request.h"
 #include "gbinder_remote_request.h"
-#include "gbinder_remote_object_p.h"
+#include "gbinder_remote_object.h"
 #include "gbinder_reader.h"
 #include "gbinder_writer.h"
 #include "gbinder_cleanup.h"
-#include "gbinder_client_p.h"
-#include "gbinder_driver.h"
+#include "gbinder_client.h"
 #include "gbinder_ipc.h"
 
 #include <gutil_log.h>
@@ -52,10 +50,10 @@
  * Test service manager
  *==========================================================================*/
 
-#define SVCMGR_IFACE "android.hidl.manager@1.0::IServiceManager"
+#define MANAGER_IFACE "android.hidl.manager@1.0::IServiceManager"
 #define NOTIFICATION_IFACE "android.hidl.manager@1.0::IServiceNotification"
 
-const char* const servicemanager_hidl_ifaces[] = { SVCMGR_IFACE, NULL };
+const char* const servicemanager_hidl_ifaces[] = { MANAGER_IFACE, NULL };
 
 enum servicemanager_hidl_tx {
     GET_TRANSACTION = GBINDER_FIRST_CALL_TRANSACTION,
@@ -256,7 +254,7 @@ test_servicemanager_hidl_handler(
     GBinderLocalReply* reply = NULL;
 
     g_assert(!flags);
-    g_assert_cmpstr(gbinder_remote_request_interface(req), == ,SVCMGR_IFACE);
+    g_assert_cmpstr(gbinder_remote_request_interface(req), == ,MANAGER_IFACE);
     *status = -1;
     gbinder_cleanup_reset(self->cleanup);
     switch (code) {
@@ -347,7 +345,7 @@ test_servicemanager_hidl_can_handle_transaction(
 {
     TestServiceManagerHidl* self = THIS(object);
 
-    if (self->handle_on_looper_thread && !g_strcmp0(SVCMGR_IFACE, iface)) {
+    if (self->handle_on_looper_thread && !g_strcmp0(MANAGER_IFACE, iface)) {
         return GBINDER_LOCAL_TRANSACTION_LOOPER;
     } else {
         return GBINDER_LOCAL_OBJECT_CLASS(PARENT_CLASS)->
@@ -364,7 +362,7 @@ test_servicemanager_hidl_handle_looper_transaction(
     guint flags,
     int* status)
 {
-    if (!g_strcmp0(gbinder_remote_request_interface(req), SVCMGR_IFACE)) {
+    if (!g_strcmp0(gbinder_remote_request_interface(req), MANAGER_IFACE)) {
         return GBINDER_LOCAL_OBJECT_CLASS(PARENT_CLASS)->
             handle_transaction(object, req, code, flags, status);
     } else {

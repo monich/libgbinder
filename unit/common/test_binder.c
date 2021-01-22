@@ -44,6 +44,9 @@ GLOG_MODULE_DEFINE2("test_binder", gutil_log_default);
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/syscall.h>
+
+#define gettid() syscall(SYS_gettid)
 
 static GHashTable* test_fd_map = NULL;
 static GHashTable* test_node_map = NULL;
@@ -92,7 +95,11 @@ struct test_binder_node {
     char* path;
     TestBinder* binder;
     TestBinderNode* other;
-    gboolean looper_enabled;
+    TEST_LOOPER looper_enabled;
+    gpointer tx_thread;
+    gint looper_count;
+    GMutex mutex; /* Protects reads and next_cmd */
+    guint32* next_cmd;
 };
 
 typedef struct test_binder_fd {
@@ -349,6 +356,114 @@ test_io_passthough_fix_handle(
 }
 
 static
+int
+test_binder_bytes_available(
+    int fd)
+{
+    int bytes_available = 0;
+    int err = ioctl(fd, FIONREAD, &bytes_available);
+
+    return (err >= 0) ? bytes_available : err;
+}
+
+static
+int
+test_binder_node_read_all(
+    int fd,
+    void* buf,
+    int nbytes)
+{
+    int out = 0;
+    guint8* ptr = buf;
+
+    while (nbytes > 0) {
+        out = read(fd, ptr, nbytes);
+        if (out < 0) {
+            break;
+        } else {
+            g_assert_cmpint(out, <= ,nbytes);
+            ptr += out;
+            nbytes -= out;
+        }
+    }
+    return out;
+}
+
+static
+guint32*
+test_binder_node_read(
+    TestBinderNode* node,
+    gsize max_bytes,
+    int* bytes_read)
+{
+    guint32* out = NULL;
+
+    /* Ensures that we never read partial commands */
+    g_mutex_lock(&node->mutex);
+    if (node->next_cmd) {
+        const guint total = 4 + _IOC_SIZE(node->next_cmd[0]);
+
+        /* Alread have one ready */
+        if (max_bytes >= total) {
+            out = node->next_cmd;
+            node->next_cmd = NULL;
+            *bytes_read = total;
+        } else {
+            GDEBUG("Buffer full (%u > %d)", total, (int)max_bytes);
+            *bytes_read = 0;
+        }
+    } else {
+        /* Read the next one from the socket */
+        int available = test_binder_bytes_available(node->fd);
+
+        if (available >= 4) {
+            guint32 cmd;
+            int err = test_binder_node_read_all(node->fd, &cmd, sizeof(cmd));
+
+            if (err < 0) {
+                GDEBUG("Read error %d", err);
+                *bytes_read = err;
+            } else {
+                guint datasize = _IOC_SIZE(cmd);
+                guint total = 4 + datasize;
+                guint32* buf = g_malloc(total);
+
+                buf[0] = cmd;
+                err = test_binder_node_read_all(node->fd, buf + 1, datasize);
+                if (err < 0) {
+                    GDEBUG("Read error %d", err);
+                    *bytes_read = err;
+                } else {
+                    buf[0] = cmd;
+                    if (max_bytes >= total) {
+                        out = buf;
+                        *bytes_read = total;
+                    } else {
+                        const guint32 noop = BR_NOOP;
+
+                        GDEBUG("Stashed cmd (%u > %d)", total, (int)max_bytes);
+                        node->next_cmd = buf;
+                        *bytes_read = 0;
+
+                        /*
+                         * Make sure looper comes back for it and doesn't
+                         * get stuck in poll() forever.
+                         */
+                        g_assert_cmpint(write(node->other->fd, &noop,
+                            sizeof(noop)), == ,sizeof(noop));
+                    }
+                }
+            }
+        } else {
+            /* Not enough data to read */
+            *bytes_read = 0;
+        }
+    }
+    g_mutex_unlock(&node->mutex);
+    return out;
+}
+
+static
 gssize
 test_io_passthough_write_64(
     TestBinderFd* fd,
@@ -360,7 +475,7 @@ test_io_passthough_write_64(
     TestBinder* binder = node->binder;
     BinderTransactionData64* tx = NULL;
     gssize bytes_written;
-    guint extra;
+    guint32* buf;
     guint32* cmd;
     guint32 bytes_to_really_write;
     void* data;
@@ -376,7 +491,7 @@ test_io_passthough_write_64(
         break;
     }
 
-    cmd = g_memdup(bytes, bytes_to_write);
+    buf = cmd = g_memdup(bytes, bytes_to_write);
     data = cmd + 1;
     switch (*cmd) {
     case BR_TRANSACTION_64:
@@ -385,17 +500,29 @@ test_io_passthough_write_64(
         break;
     case BC_TRANSACTION_64:
     case BC_TRANSACTION_SG_64:
+        if (g_atomic_pointer_compare_and_exchange(&node->tx_thread, NULL,
+            g_thread_self())) {
+            GDEBUG("Transaction thread %ld", gettid());
+        }
         *cmd = BR_TRANSACTION_64;
-         tx = data;
-       break;
+        tx = data;
+        break;
     case BR_REPLY_64:
         *cmd = BC_REPLY_64;
         tx = data;
         break;
     case BC_REPLY_64:
     case BC_REPLY_SG_64:
-        extra = BR_TRANSACTION_COMPLETE;
-        write(fd->fd, &extra, sizeof(extra));
+        /*
+         * Prepend BR_TRANSACTION_COMPLETE. The whole thing has to be written
+         * with a single write so that it gets read with a single read.
+         */
+        GDEBUG("Thread %ld inserting BR_TRANSACTION_COMPLETE", gettid());
+        buf = g_realloc(buf, bytes_to_write + 4);
+        cmd = buf + 1;
+        data = cmd + 1;
+        memmove(cmd, buf, bytes_to_write);
+        *buf = BR_TRANSACTION_COMPLETE;
         *cmd = BR_REPLY_64;
         tx = data;
         break;
@@ -438,9 +565,9 @@ test_io_passthough_write_64(
     }
 
     /* Real number of bytes to write may have changed */
-    bytes_to_really_write = sizeof(guint32) + _IOC_SIZE(*cmd);
-    bytes_written = write(fd->fd, cmd, bytes_to_really_write);
-    g_free(cmd);
+    bytes_to_really_write = ((guint8*)data - (guint8*)buf) + _IOC_SIZE(*cmd);
+    bytes_written = write(fd->fd, buf, bytes_to_really_write);
+    g_free(buf);
     g_assert(bytes_written == bytes_to_really_write || bytes_written <= 0);
     return (bytes_written >= 0) ? bytes_to_write : bytes_written;
 }
@@ -457,13 +584,15 @@ test_io_handle_write_read_64(
     gssize bytes_left = wr->write_size - wr->write_consumed;
     const guint8* write_ptr = (void*)(gsize)(wr->write_buffer +
         wr->write_consumed);
-    gboolean is_looper;
+    gpointer tx_thread = g_atomic_pointer_get(&node->tx_thread);
+    gboolean can_read;
 
     while (bytes_left >= sizeof(guint32)) {
         const guint cmd = *(guint32*)write_ptr;
         const guint cmdsize = _IOC_SIZE(cmd);
         const void* cmddata = write_ptr + sizeof(guint32);
         const gsize bytes_to_write = sizeof(guint32) + cmdsize;
+        int looper;
 
         GASSERT(bytes_left >= bytes_to_write);
         if (bytes_left >= bytes_to_write) {
@@ -474,9 +603,14 @@ test_io_handle_write_read_64(
                 test_io_free_buffer(fd, GSIZE_TO_POINTER(*(guint64*)cmddata));
                 break;
             case BC_ENTER_LOOPER:
-                g_private_set(&test_looper, GINT_TO_POINTER(TRUE));
+                g_assert(g_private_get(&test_looper) >= 0);
+                looper = g_atomic_int_add(&node->looper_count, 1) + 1;
+                g_private_set(&test_looper, GINT_TO_POINTER(looper));
+                GDEBUG("Thread %ld is looper #%d", gettid(), looper);
                 break;
             case BC_EXIT_LOOPER:
+                GDEBUG("Thread %ld is no longer a looper", gettid());
+                g_atomic_int_add(&node->looper_count, -1);
                 g_private_set(&test_looper, NULL);
                 break;
             default:
@@ -501,48 +635,66 @@ test_io_handle_write_read_64(
         }
     }
 
-    is_looper = g_private_get(&test_looper) ? TRUE : FALSE;
-    if ((node->looper_enabled || !is_looper) &&
-        (wr->read_size > wr->read_consumed)) {
-        /* Do we have anything to read? */
-        int bytes_available = 0;
-        int err = ioctl(fd->fd, FIONREAD, &bytes_available);
-
-        /* Re-check the looper_enabled flag */
-        if (err >= 0 && (node->looper_enabled || !is_looper)) {
-            int bytes_read = 0;
-
-            if (bytes_available >= 4) {
-                /* Read the data from the socket */
-                bytes_read = read(fd->fd, (void*)(gsize)
-                   (wr->read_buffer + wr->read_consumed),
-                    wr->read_size - wr->read_consumed);
-            } else {
-                struct timespec wait;
-
-                wait.tv_sec = 0;
-                wait.tv_nsec = 10 * 1000000; /* 10 ms */
-                nanosleep(&wait, &wait);
-            }
-
-            if (bytes_read >= 0) {
-                wr->read_consumed += bytes_read;
-                return 0;
-            } else {
-                err = bytes_read;
-            }
-        }
-        return err;
+    if (tx_thread && tx_thread != g_thread_self()) {
+        can_read = FALSE;
     } else {
-        if (wr->read_size > 0) {
-            struct timespec wait;
+        const gint looper = GPOINTER_TO_INT(g_private_get(&test_looper));
 
-            wait.tv_sec = 0;
-            wait.tv_nsec = 100 * 1000000; /* 100 ms */
-            nanosleep(&wait, &wait);
+        if (looper <= 0) {
+            /* Main or pooled client thread */
+            can_read = TRUE;
+        } else {
+            can_read = FALSE;
+            switch (node->looper_enabled) {
+            case TEST_LOOPER_DISABLE:
+                break;
+            case TEST_LOOPER_ENABLE:
+                can_read = (looper > 0);
+                break;
+            case TEST_LOOPER_ENABLE_ONE:
+                can_read = (looper == 1);
+                break;
+            }
         }
-        return 0;
     }
+
+    if (can_read && (wr->read_size > wr->read_consumed)) {
+        int nbytes = 0;
+        int avail = wr->read_size - wr->read_consumed;
+        int total = 0;
+        gboolean transaction_complete = FALSE;
+        guint8* buf = GSIZE_TO_POINTER(wr->read_buffer + wr->read_consumed);
+        guint32* cmd;
+
+        while ((cmd = test_binder_node_read(node, avail, &nbytes)) != NULL) {
+            g_assert_cmpint(nbytes, <= ,avail);
+            if (cmd[0] == BR_TRANSACTION_COMPLETE) {
+                transaction_complete = TRUE;
+            }
+            memcpy(buf, cmd, nbytes);
+            wr->read_consumed += nbytes;
+            total += nbytes;
+            avail -= nbytes;
+            buf += nbytes;
+            g_free(cmd);
+        }
+
+        if (transaction_complete && g_atomic_pointer_compare_and_exchange
+           (&node->tx_thread, g_thread_self(), NULL)) {
+            GDEBUG("Thread %ld done with the transaction", gettid());
+        }
+
+        if (nbytes < 0) {
+            /* Error */
+            return nbytes;
+        } else if (!total) {
+            /* Nothing was read */
+            usleep(100000); /* 100 ms */
+        }
+    } else if (wr->read_size > 0) {
+        usleep(100000); /* 100 ms */
+    }
+    return 0;
 }
 
 static const TestBinderIo test_io_64 = {
@@ -600,12 +752,12 @@ test_io_destroy_none(
 void
 test_binder_set_looper_enabled(
     int fd,
-    gboolean enabled)
+    TEST_LOOPER value)
 {
     TestBinderFd* binder_fd = test_binder_fd_from_fd(fd);
 
     g_assert(binder_fd);
-    binder_fd->node->looper_enabled = enabled;
+    binder_fd->node->looper_enabled = value;
 }
 
 void
@@ -894,6 +1046,8 @@ test_binder_node_clear(
         test_node_map = NULL;
     }
     close(node->fd);
+    g_mutex_clear(&node->mutex);
+    g_free(node->next_cmd);
     g_free(node->path);
 }
 
@@ -1026,6 +1180,9 @@ test_binder_fd_new(
 {
     TestBinderFd* binder_fd = g_new0(TestBinderFd, 1);
 
+    /* Assume it's being created by the main thread */
+    g_assert(GPOINTER_TO_INT(g_private_get(&test_looper)) <= 0);
+    g_private_set(&test_looper, GINT_TO_POINTER(-1));
     test_binder_ref(node->binder);
     binder_fd->node = node;
     binder_fd->fd = dup(node->fd);
@@ -1074,18 +1231,21 @@ gbinder_system_open(
                 test_node_map = g_hash_table_new(g_str_hash, g_str_equal);
             }
             for (i = 0; i < 2; i++) {
-                binder->node[i].binder = binder;
-                binder->node[i].fd = fds[i];
-                binder->node[i].other = binder->node + ((i + 1) % 2);
-                g_hash_table_replace(test_node_map, binder->node[i].path,
-                    binder->node + i);
+                TestBinderNode* this_node = binder->node + i;
+
+                g_mutex_init(&this_node->mutex);
+                this_node->binder = binder;
+                this_node->fd = fds[i];
+                this_node->other = binder->node + ((i + 1) % 2);
+                g_hash_table_replace(test_node_map, this_node->path, this_node);
             }
             binder->object_map = g_hash_table_new
                 (g_direct_hash, g_direct_equal);
             binder->handle_map = g_hash_table_new
                 (g_direct_hash, g_direct_equal);
-            GDEBUG("Created %s <=> %s binder", binder->node[0].path,
-                binder->node[1].path);
+            GDEBUG("Created %s (%d) <=> %s (%d) binder",
+                binder->node[0].path, binder->node[0].fd,
+                binder->node[1].path, binder->node[1].fd);
         }
         fd = test_binder_fd_new(node);
         if (!test_fd_map) {
