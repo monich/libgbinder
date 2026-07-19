@@ -25,7 +25,6 @@ all:
 	@$(MAKE) -C unit_servicemanager_aidl $*
 	@$(MAKE) -C unit_servicemanager_aidl2 $*
 	@$(MAKE) -C unit_servicemanager_aidl3 $*
-	@$(MAKE) -C unit_servicemanager_aidl4 $*
 	@$(MAKE) -C unit_servicemanager_aidl5 $*
 	@$(MAKE) -C unit_servicemanager_aidl6 $*
 	@$(MAKE) -C unit_servicemanager_hidl $*

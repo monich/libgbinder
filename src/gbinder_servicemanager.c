@@ -3,8 +3,6 @@
  * Copyright (C) 2018-2024 Slava Monich <slava@monich.com>
  * Copyright (C) 2026 Jolla Mobile Ltd
  *
- * You may use this file under the terms of BSD license as follows:
- *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -82,7 +80,7 @@ static const GBinderServiceManagerType gbinder_servicemanager_types[] = {
     { "aidl", gbinder_servicemanager_aidl_get_type },
     { "aidl2", gbinder_servicemanager_aidl2_get_type },
     { "aidl3", gbinder_servicemanager_aidl3_get_type },
-    { "aidl4", gbinder_servicemanager_aidl4_get_type },
+    { "aidl4", gbinder_servicemanager_aidl3_get_type },
     { "aidl5", gbinder_servicemanager_aidl5_get_type },
     { "aidl6", gbinder_servicemanager_aidl6_get_type },
     { "hidl", gbinder_servicemanager_hidl_get_type }

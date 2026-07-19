@@ -3,8 +3,6 @@
  * Copyright (C) 2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2026 Jolla Mobile Ltd
  *
- * You may use this file under the terms of BSD license as follows:
- *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -62,14 +60,6 @@ GType
 gbinder_servicemanager_aidl3_get_type()
 {
     /* Dummy function to avoid pulling in gbinder_servicemanager_aidl3 */
-    g_assert_not_reached();
-    return 0;
-}
-
-GType
-gbinder_servicemanager_aidl4_get_type()
-{
-    /* Dummy function to avoid pulling in gbinder_servicemanager_aidl4 */
     g_assert_not_reached();
     return 0;
 }
