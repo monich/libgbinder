@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2021 Jolla Ltd.
  * Copyright (C) 2021 Slava Monich <slava.monich@jolla.com>
  *
@@ -139,8 +140,6 @@ app_init(
 
     GError* error = NULL;
     GOptionContext* options = g_option_context_new("SRC DST NAME [IFACES...]");
-
-    gutil_log_default.level = GLOG_LEVEL_DEFAULT;
 
     g_option_context_add_main_entries(options, entries, NULL);
     g_option_context_set_summary(options,

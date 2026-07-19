@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2018 Jolla Ltd.
  * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
  *
@@ -302,11 +303,7 @@ app_init(
     GOptionContext* options = g_option_context_new("[NAME]");
 
     memset(opt, 0, sizeof(*opt));
-
-    gutil_log_timestamp = FALSE;
     gutil_log_set_type(GLOG_TYPE_STDERR, pname);
-    gutil_log_default.level = GLOG_LEVEL_DEFAULT;
-
     g_option_context_add_main_entries(options, entries, NULL);
     if (g_option_context_parse(options, &argc, &argv, &error)) {
         char* help;

@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2021-2022 Jolla Ltd.
  *
  * You may use this file under the terms of BSD license as follows:
@@ -93,4 +94,3 @@ cmdlinelex(
 extern struct transaction_and_reply* ast;
 
 #endif
-

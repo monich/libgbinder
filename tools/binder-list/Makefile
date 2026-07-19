@@ -2,4 +2,4 @@
 
 EXE = binder-list
 
-include ../common/Makefile
+include ../../test/common/Makefile
