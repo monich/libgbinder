@@ -58,17 +58,11 @@ This package contains the development library for %{name}.
 
 %build
 %make_build LIBDIR=%{_libdir} KEEP_SYMBOLS=1 release pkgconfig
-%make_build -C test/binder-bridge -j1 KEEP_SYMBOLS=1 release
-%make_build -C test/binder-list -j1 KEEP_SYMBOLS=1 release
-%make_build -C test/binder-ping -j1 KEEP_SYMBOLS=1 release
-%make_build -C test/binder-call -j1 KEEP_SYMBOLS=1 release
+%make_build -C tools KEEP_SYMBOLS=1 release
 
 %install
 make LIBDIR=%{_libdir} DESTDIR=%{buildroot} install-dev
-make -C test/binder-bridge DESTDIR=%{buildroot} install
-make -C test/binder-list DESTDIR=%{buildroot} install
-make -C test/binder-ping DESTDIR=%{buildroot} install
-make -C test/binder-call DESTDIR=%{buildroot} install
+make -C tools DESTDIR=%{buildroot} install
 
 %check
 make -C unit test

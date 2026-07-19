@@ -2,4 +2,4 @@
 
 EXE = binder-bridge
 
-include ../common/Makefile
+include ../../test/common/Makefile

@@ -36,7 +36,6 @@ GEN_SRC = \
 
 SRC_DIR = .
 BUILD_DIR = build
-GEN_DIR = $(BUILD_DIR)
 LIB_DIR = ../..
 DEBUG_BUILD_DIR = $(BUILD_DIR)/debug
 RELEASE_BUILD_DIR = $(BUILD_DIR)/release
@@ -51,7 +50,7 @@ LD = $(CC)
 WARNINGS = -Wall
 DEFINES += -DGLIB_VERSION_MAX_ALLOWED=GLIB_VERSION_2_32 \
   -DGLIB_VERSION_MIN_REQUIRED=GLIB_VERSION_MAX_ALLOWED
-INCLUDES = -I$(LIB_DIR)/include -I$(GEN_DIR) -I$(SRC_DIR)
+INCLUDES = -I$(LIB_DIR)/include -I$(SRC_DIR)
 CFLAGS += -fPIC $(DEFINES) $(WARNINGS) $(INCLUDES) -MMD -MP \
   $(shell $(PKG_CONFIG) --cflags $(PKGS))
 LDFLAGS += -pie $(shell $(PKG_CONFIG) --libs $(PKGS))
@@ -67,8 +66,8 @@ endif
 
 DEBUG_LDFLAGS = $(LDFLAGS) $(DEBUG_FLAGS)
 RELEASE_LDFLAGS = $(LDFLAGS) $(RELEASE_FLAGS)
-DEBUG_CFLAGS = $(CFLAGS) $(DEBUG_FLAGS) -DDEBUG
-RELEASE_CFLAGS = $(CFLAGS) $(RELEASE_FLAGS) -O2
+DEBUG_CFLAGS = $(CFLAGS) $(DEBUG_FLAGS) -I$(DEBUG_BUILD_DIR) -DDEBUG
+RELEASE_CFLAGS = $(CFLAGS) $(RELEASE_FLAGS) -I $(RELEASE_BUILD_DIR) -O2
 
 #
 # Files
@@ -85,10 +84,10 @@ DEBUG_SO_FILE := $(shell $(QUIET_MAKE) -C $(LIB_DIR) print_debug_so)
 RELEASE_SO_FILE := $(shell $(QUIET_MAKE) -C $(LIB_DIR) print_release_so)
 DEBUG_LINK_FILE := $(shell $(QUIET_MAKE) -C $(LIB_DIR) print_debug_link)
 RELEASE_LINK_FILE := $(shell $(QUIET_MAKE) -C $(LIB_DIR) print_release_link)
+DEBUG_GEN_FILES = $(GEN_SRC:%=$(DEBUG_BUILD_DIR)/%)
+RELEASE_GEN_FILES = $(GEN_SRC:%=$(RELEASE_BUILD_DIR)/%)
 DEBUG_SO = $(LIB_DIR)/$(DEBUG_SO_FILE)
 RELEASE_SO = $(LIB_DIR)/$(RELEASE_SO_FILE)
-GEN_FILES = $(GEN_SRC:%=$(GEN_DIR)/%)
-.PRECIOUS: $(GEN_FILES)
 
 #
 # Dependencies
@@ -101,7 +100,8 @@ ifneq ($(strip $(DEPS)),)
 endif
 endif
 
-$(GEN_FILES): | $(GEN_DIR)
+$(DEBUG_GEN_FILES): | $(DEBUG_BUILD_DIR)
+$(RELEASE_GEN_FILES): | $(RELEASE_BUILD_DIR)
 $(DEBUG_OBJS): | $(DEBUG_BUILD_DIR)
 $(RELEASE_OBJS): | $(RELEASE_BUILD_DIR)
 
@@ -123,31 +123,31 @@ clean:
 cleaner: clean
 	@$(MAKE) -C $(LIB_DIR) clean
 
-$(DEBUG_BUILD_DIR):
+$(DEBUG_BUILD_DIR) $(RELEASE_BUILD_DIR):
 	mkdir -p $@
 
-$(RELEASE_BUILD_DIR):
-	mkdir -p $@
-
-$(GEN_DIR):
-	mkdir -p $@
-
-$(GEN_DIR)/%.tab.c : $(SRC_DIR)/%.y
+$(DEBUG_BUILD_DIR)/%.tab.c: $(SRC_DIR)/%.y
 	bison -pcmdline -bcmdline -d -o $@ $<
 
-$(GEN_DIR)/lex.%.c : $(SRC_DIR)/%.l
+$(RELEASE_BUILD_DIR)/%.tab.c: $(SRC_DIR)/%.y
+	bison -pcmdline -bcmdline -d -o $@ $<
+
+$(DEBUG_BUILD_DIR)/lex.%.c: $(SRC_DIR)/%.l $(DEBUG_BUILD_DIR)/%.tab.c
 	flex -o $@ $<
 
-$(DEBUG_BUILD_DIR)/%.o : $(GEN_DIR)/%.c
+$(RELEASE_BUILD_DIR)/lex.%.c: $(SRC_DIR)/%.l $(RELEASE_BUILD_DIR)/%.tab.c
+	flex -o $@ $<
+
+$(DEBUG_BUILD_DIR)/%.o: $(SRC_DIR)/%.c
 	$(CC) -c $(DEBUG_CFLAGS) -MT"$@" -MF"$(@:%.o=%.d)" $< -o $@
 
-$(RELEASE_BUILD_DIR)/%.o : $(GEN_DIR)/%.c
+$(DEBUG_BUILD_DIR)/%.o: $(DEBUG_BUILD_DIR)/%.c
+	$(CC) -c $(DEBUG_CFLAGS) -MT"$@" -MF"$(@:%.o=%.d)" $< -o $@
+
+$(RELEASE_BUILD_DIR)/%.o: $(SRC_DIR)/%.c
 	$(CC) -c $(RELEASE_CFLAGS) -MT"$@" -MF"$(@:%.o=%.d)" $< -o $@
 
-$(DEBUG_BUILD_DIR)/%.o : $(SRC_DIR)/%.c
-	$(CC) -c $(DEBUG_CFLAGS) -MT"$@" -MF"$(@:%.o=%.d)" $< -o $@
-
-$(RELEASE_BUILD_DIR)/%.o : $(SRC_DIR)/%.c
+$(RELEASE_BUILD_DIR)/%.o: $(RELEASE_BUILD_DIR)/%.c
 	$(CC) -c $(RELEASE_CFLAGS) -MT"$@" -MF"$(@:%.o=%.d)" $< -o $@
 
 $(DEBUG_EXE): $(DEBUG_SO) $(DEBUG_BUILD_DIR) $(DEBUG_OBJS)

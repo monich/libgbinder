@@ -2,4 +2,4 @@
 
 EXE = binder-ping
 
-include ../common/Makefile
+include ../../test/common/Makefile

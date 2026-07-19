@@ -234,6 +234,7 @@ print_release_path:
 	@echo $(RELEASE_BUILD_DIR)
 
 clean:
+	$(MAKE) -C tools clean
 	$(MAKE) -C test clean
 	$(MAKE) -C unit clean
 	rm -fr test/coverage/results test/coverage/*.gcov

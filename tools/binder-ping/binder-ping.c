@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2020 Jolla Ltd.
  * Copyright (C) 2020 Slava Monich <slava.monich@jolla.com>
  *
@@ -132,9 +133,6 @@ app_init(
 
     GError* error = NULL;
     GOptionContext* options = g_option_context_new("[FQNAME]");
-
-    gutil_log_timestamp = FALSE;
-    gutil_log_default.level = GLOG_LEVEL_DEFAULT;
 
     g_option_context_add_main_entries(options, entries, NULL);
     if (g_option_context_parse(options, &argc, &argv, &error)) {
