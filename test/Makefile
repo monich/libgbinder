@@ -5,4 +5,5 @@ all:
 	@$(MAKE) -C binder-client $*
 	@$(MAKE) -C binder-dump $*
 	@$(MAKE) -C binder-service $*
+	@$(MAKE) -C binder-watch $*
 	@$(MAKE) -C rild-card-status $*
