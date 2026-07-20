@@ -60,7 +60,7 @@ typedef struct gbinder_servicemanager_class {
     const char* iface;
     const char* default_device;
 
-    /* Methods (synchronous) */
+    /* Methods (synchronous, may be invoked on a worker thread) */
     char** (*list)(GBinderServiceManager* self, const GBinderIpcSyncApi* api);
     GBinderRemoteObject* (*get_service)(GBinderServiceManager* self,
         const char* name, int* status, const GBinderIpcSyncApi* api);

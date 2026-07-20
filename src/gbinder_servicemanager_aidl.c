@@ -3,8 +3,6 @@
  * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2026 Jolla Mobile Ltd
  *
- * You may use this file under the terms of BSD license as follows:
- *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -57,11 +55,20 @@ G_DEFINE_TYPE(GBinderServiceManagerAidl,
     GBINDER_TYPE_SERVICEMANAGER)
 
 #define PARENT_CLASS gbinder_servicemanager_aidl_parent_class
-#define GBINDER_SERVICEMANAGER_AIDL(obj) \
-    G_TYPE_CHECK_INSTANCE_CAST((obj), GBINDER_TYPE_SERVICEMANAGER_AIDL, \
-    GBinderServiceManagerAidl)
+#define THIS(obj) G_TYPE_CHECK_INSTANCE_CAST(obj, \
+        GBINDER_TYPE_SERVICEMANAGER_AIDL, GBinderServiceManagerAidl)
+#define GET_THIS_CLASS(obj) GBINDER_SERVICEMANAGER_AIDL_GET_CLASS(obj)
 
 #define SERVICEMANAGER_AIDL_IFACE  "android.os.IServiceManager"
+
+enum gbinder_servicemanager_aidl_calls {
+    GET_SERVICE_TRANSACTION = GBINDER_FIRST_CALL_TRANSACTION,
+    CHECK_SERVICE_TRANSACTION,
+    ADD_SERVICE_TRANSACTION,
+    LIST_SERVICES_TRANSACTION,
+    REGISTER_FOR_NOTIFICATIONS_TRANSACTION,
+    UNREGISTER_FOR_NOTIFICATIONS_TRANSACTION
+};
 
 static
 void
@@ -166,8 +173,7 @@ gbinder_servicemanager_aidl_list(
 {
     GPtrArray* list = g_ptr_array_new();
     GBinderClient* client = manager->client;
-    GBinderServiceManagerAidlClass* klass =
-        GBINDER_SERVICEMANAGER_AIDL_GET_CLASS(manager);
+    GBinderServiceManagerAidlClass* klass = GET_THIS_CLASS(manager);
     GBinderLocalRequest* req = klass->list_services_req(client, 0);
     GBinderRemoteReply* reply;
 
@@ -201,35 +207,16 @@ gbinder_servicemanager_aidl_get_service(
     GBinderRemoteObject* obj;
     GBinderRemoteReply* reply;
     GBinderLocalRequest* req = gbinder_client_new_request(self->client);
+    GBinderServiceManagerAidlClass* klass = GET_THIS_CLASS(self);
 
     gbinder_local_request_append_string16(req, name);
     reply = gbinder_client_transact_sync_reply2(self->client,
-        CHECK_SERVICE_TRANSACTION, req, status, api);
+        klass->check_service_transaction, req, status, api);
 
     obj = gbinder_remote_reply_read_object(reply);
     gbinder_remote_reply_unref(reply);
     gbinder_local_request_unref(req);
     return obj;
-}
-
-int
-gbinder_servicemanager_aidl_add_service_internal(
-    GBinderServiceManager* manager,
-    const char* name,
-    GBinderLocalObject* obj,
-    const GBinderIpcSyncApi* api,
-    guint32 code)
-{
-    int status;
-    GBinderClient* client = manager->client;
-    GBinderLocalRequest* req = GBINDER_SERVICEMANAGER_AIDL_GET_CLASS
-        (manager)->add_service_req(client, name, obj);
-    GBinderRemoteReply* reply = gbinder_client_transact_sync_reply2(client,
-        code, req, &status, api);
-
-    gbinder_remote_reply_unref(reply);
-    gbinder_local_request_unref(req);
-    return status;
 }
 
 static
@@ -240,8 +227,16 @@ gbinder_servicemanager_aidl_add_service(
     GBinderLocalObject* obj,
     const GBinderIpcSyncApi* api)
 {
-    return gbinder_servicemanager_aidl_add_service_internal(manager, name, obj,
-        api, ADD_SERVICE_TRANSACTION);
+    int status;
+    GBinderClient* client = manager->client;
+    GBinderServiceManagerAidlClass* klass = GET_THIS_CLASS(manager);
+    GBinderLocalRequest* req = klass->add_service_req(client, name, obj);
+    GBinderRemoteReply* reply = gbinder_client_transact_sync_reply2(client,
+        klass->add_service_transaction, req, &status, api);
+
+    gbinder_remote_reply_unref(reply);
+    gbinder_local_request_unref(req);
+    return status;
 }
 
 static
@@ -259,7 +254,7 @@ gbinder_servicemanager_aidl_watch(
     GBinderServiceManager* manager,
     const char* name)
 {
-    GBinderServiceManagerAidl* self = GBINDER_SERVICEMANAGER_AIDL(manager);
+    GBinderServiceManagerAidl* self = THIS(manager);
     GBinderServiceManagerAidlPriv* priv = self->priv;
     GBinderServiceManagerAidlWatch* watch =
         gbinder_servicemanager_aidl_watch_new(self, name);
@@ -278,7 +273,7 @@ gbinder_servicemanager_aidl_unwatch(
     GBinderServiceManager* manager,
     const char* name)
 {
-    GBinderServiceManagerAidl* self = GBINDER_SERVICEMANAGER_AIDL(manager);
+    GBinderServiceManagerAidl* self = THIS(manager);
     GBinderServiceManagerAidlPriv* priv = self->priv;
 
     g_hash_table_remove(priv->watch_table, name);
@@ -302,7 +297,7 @@ void
 gbinder_servicemanager_aidl_finalize(
     GObject* object)
 {
-    GBinderServiceManagerAidl* self = GBINDER_SERVICEMANAGER_AIDL(object);
+    GBinderServiceManagerAidl* self = THIS(object);
     GBinderServiceManagerAidlPriv* priv = self->priv;
 
     g_hash_table_destroy(priv->watch_table);
@@ -318,6 +313,15 @@ gbinder_servicemanager_aidl_class_init(
     GObjectClass* object = G_OBJECT_CLASS(klass);
 
     g_type_class_add_private(klass, sizeof(GBinderServiceManagerAidlPriv));
+
+    klass->check_service_transaction = CHECK_SERVICE_TRANSACTION;
+    klass->add_service_transaction = ADD_SERVICE_TRANSACTION;
+    klass->list_services_transaction = LIST_SERVICES_TRANSACTION;
+    klass->register_for_notifications_transaction =
+        REGISTER_FOR_NOTIFICATIONS_TRANSACTION;
+    klass->unregister_for_notifications_transaction =
+        UNREGISTER_FOR_NOTIFICATIONS_TRANSACTION;
+
     klass->list_services_req = gbinder_servicemanager_aidl_list_services_req;
     klass->add_service_req = gbinder_servicemanager_aidl_add_service_req;
 

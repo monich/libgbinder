@@ -116,6 +116,7 @@ servicemanager_aidl5_handler(
     g_mutex_lock(&self->mutex);
     switch (code) {
     case AIDL5_GET_SERVICE_TRANSACTION:
+    case AIDL5_CHECK_SERVICE_TRANSACTION:
         gbinder_remote_request_init_reader(req, &reader);
         str = gbinder_reader_read_string16(&reader);
         if (str) {

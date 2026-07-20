@@ -3,8 +3,6 @@
  * Copyright (C) 2021-2022 Slava Monich <slava.monich@jolla.com>
  * Copyright (C) 2026 Jolla Mobile Ltd
  *
- * You may use this file under the terms of BSD license as follows:
- *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -31,14 +29,7 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "gbinder_servicemanager_aidl_p.h"
-#include "gbinder_client_p.h"
-#include "gbinder_reader_p.h"
-
-#include <gbinder_local_request.h>
-#include <gbinder_remote_reply.h>
-
-#include <gutil_log.h>
+#include "gbinder_servicemanager_aidl.h"
 
 /* Variant of AIDL servicemanager appeared in Android 15 (API level 35) */
 
@@ -47,41 +38,18 @@ typedef GBinderServiceManagerAidlClass GBinderServiceManagerAidl5Class;
 
 G_DEFINE_TYPE(GBinderServiceManagerAidl5,
     gbinder_servicemanager_aidl5,
-    GBINDER_TYPE_SERVICEMANAGER_AIDL)
+    /* AIDL4 is missing for historical reasons */
+    GBINDER_TYPE_SERVICEMANAGER_AIDL3)
 
-#define PARENT_CLASS gbinder_servicemanager_aidl5_parent_class
-
-GBinderRemoteObject*
-gbinder_servicemanager_aidl5_get_service(
-    GBinderServiceManager* self,
-    const char* name,
-    int* status,
-    const GBinderIpcSyncApi* api)
-{
-    return gbinder_servicemanager_aidl3_get_service_internal(self, name,
-        status, api, AIDL5_GET_SERVICE_TRANSACTION);
-}
-
-char**
-gbinder_servicemanager_aidl5_list(
-    GBinderServiceManager* manager,
-    const GBinderIpcSyncApi* api)
-{
-    return gbinder_servicemanager_aidl3_list_internal(manager, api,
-        AIDL5_LIST_SERVICES_TRANSACTION);
-}
-
-static
-int
-gbinder_servicemanager_aidl5_add_service(
-    GBinderServiceManager* manager,
-    const char* name,
-    GBinderLocalObject* obj,
-    const GBinderIpcSyncApi* api)
-{
-    return gbinder_servicemanager_aidl_add_service_internal(manager, name, obj,
-        api, AIDL5_ADD_SERVICE_TRANSACTION);
-}
+enum gbinder_servicemanager_aidl5_calls {
+    AIDL5_GET_SERVICE_TRANSACTION = GBINDER_FIRST_CALL_TRANSACTION,
+    AIDL5_GET_SERVICE2_TRANSACTION,
+    AIDL5_CHECK_SERVICE_TRANSACTION,
+    AIDL5_ADD_SERVICE_TRANSACTION,
+    AIDL5_LIST_SERVICES_TRANSACTION,
+    AIDL5_REGISTER_FOR_NOTIFICATIONS_TRANSACTION,
+    AIDL5_UNREGISTER_FOR_NOTIFICATIONS_TRANSACTION
+};
 
 static
 void
@@ -95,12 +63,13 @@ void
 gbinder_servicemanager_aidl5_class_init(
     GBinderServiceManagerAidl5Class* klass)
 {
-    GBinderServiceManagerClass* manager = GBINDER_SERVICEMANAGER_CLASS(klass);
-
-    klass->add_service_req = gbinder_servicemanager_aidl2_add_service_req;
-    manager->list = gbinder_servicemanager_aidl5_list;
-    manager->get_service = gbinder_servicemanager_aidl5_get_service;
-    manager->add_service = gbinder_servicemanager_aidl5_add_service;
+    klass->check_service_transaction = AIDL5_CHECK_SERVICE_TRANSACTION;
+    klass->add_service_transaction = AIDL5_ADD_SERVICE_TRANSACTION;
+    klass->list_services_transaction = AIDL5_LIST_SERVICES_TRANSACTION;
+    klass->register_for_notifications_transaction =
+        AIDL5_REGISTER_FOR_NOTIFICATIONS_TRANSACTION;
+    klass->unregister_for_notifications_transaction =
+        AIDL5_UNREGISTER_FOR_NOTIFICATIONS_TRANSACTION;
 }
 
 /*
