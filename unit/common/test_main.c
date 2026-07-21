@@ -1,8 +1,7 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2018-2026 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2020 Jolla Ltd.
- *
- * You may use this file under the terms of BSD license as follows:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -44,7 +43,8 @@ typedef struct test_quit_later_data{
 
 typedef struct test_context_data{
     GMainLoop* loop;
-    GTestFunc func;
+    GTestDataFunc func;
+    gconstpointer param;
 } TestContextData;
 
 static
@@ -113,15 +113,11 @@ test_quit_later(
 }
 
 static
-gboolean
+void
 test_run_in_context_cb(
-    gpointer data)
+    gconstpointer param)
 {
-    TestContextData* test = data;
-
-    test->func();
-    g_main_loop_quit(test->loop);
-    return G_SOURCE_REMOVE;
+    ((GTestFunc)param)();
 }
 
 void
@@ -129,10 +125,32 @@ test_run_in_context(
     const TestOpt* opt,
     GTestFunc func)
 {
+    test_run_in_context_param(opt, test_run_in_context_cb, func);
+}
+
+static
+gboolean
+test_run_in_context_param_cb(
+    gpointer data)
+{
+    const TestContextData* test = data;
+
+    test->func(test->param);
+    g_main_loop_quit(test->loop);
+    return G_SOURCE_REMOVE;
+}
+
+void
+test_run_in_context_param(
+    const TestOpt* opt,
+    GTestDataFunc func,
+    gconstpointer param)
+{
     TestContextData test;
 
     test.loop = g_main_loop_new(NULL, FALSE);
     test.func = func;
+    test.param = param;
 
     /*
      * This makes sure that we own the context for the entire duration
@@ -141,7 +159,7 @@ test_run_in_context(
      * invoked on the main thread (rather than a random worker thread
      * which happens to acquire the context).
      */
-    g_idle_add(test_run_in_context_cb, &test);
+    g_idle_add(test_run_in_context_param_cb, &test);
     test_run(opt, test.loop);
     g_main_loop_unref(test.loop);
 }
@@ -156,6 +174,7 @@ test_run(
     } else {
         const guint timeout_id = g_timeout_add_seconds(TEST_TIMEOUT_SEC,
             test_timeout_expired, NULL);
+
         g_main_loop_run(loop);
         g_source_remove(timeout_id);
     }

@@ -1,8 +1,7 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2021 Jolla Ltd.
- *
- * You may use this file under the terms of BSD license as follows:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -91,6 +90,12 @@ void
 test_run_in_context(
     const TestOpt* opt,
     GTestFunc func);
+
+void
+test_run_in_context_param(
+    const TestOpt* opt,
+    GTestDataFunc func,
+    gconstpointer param);
 
 #define TEST_TIMEOUT_SEC (20)
 
