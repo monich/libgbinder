@@ -134,6 +134,7 @@ gbinder_servicemanager_aidl3_class_init(
 {
     GBinderServiceManagerClass* manager = GBINDER_SERVICEMANAGER_CLASS(klass);
 
+    gbinder_servicemanager_class_common_init(manager);
     manager->list = gbinder_servicemanager_aidl3_list;
     manager->get_service = gbinder_servicemanager_aidl3_get_service;
 }

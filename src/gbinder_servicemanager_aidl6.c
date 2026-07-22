@@ -63,6 +63,9 @@ void
 gbinder_servicemanager_aidl6_class_init(
     GBinderServiceManagerAidl6Class* klass)
 {
+    GBinderServiceManagerClass* manager = GBINDER_SERVICEMANAGER_CLASS(klass);
+
+    gbinder_servicemanager_class_common_init(manager);
     klass->check_service_transaction = AIDL6_CHECK_SERVICE_TRANSACTION;
     klass->add_service_transaction = AIDL6_ADD_SERVICE_TRANSACTION;
     klass->list_services_transaction = AIDL6_LIST_SERVICES_TRANSACTION;

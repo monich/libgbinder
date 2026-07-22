@@ -1124,6 +1124,24 @@ gbinder_servicemanager_finalize(
     G_OBJECT_CLASS(PARENT_CLASS)->finalize(object);
 }
 
+void
+gbinder_servicemanager_class_common_init(
+    GBinderServiceManagerClass* klass)
+{
+    /*
+     * Every subclass must call this function in its class init routine,
+     * else they may end up sharing the table. Even though the base class
+     * is abstract and can't be directly instantiated (and therefore its
+     * table remains null), AIDL classes form a hierarchy and may actually
+     * end up sharing it.
+     *
+     * It's also a good idea to individually init the mutex for every
+     * subclass, instead of assuming that memcpy would do the right thing.
+     */
+    g_mutex_init(&klass->mutex);
+    klass->table = NULL;
+}
+
 static
 void
 gbinder_servicemanager_class_init(
@@ -1132,7 +1150,7 @@ gbinder_servicemanager_class_init(
     GObjectClass* object_class = G_OBJECT_CLASS(klass);
     GType type = G_OBJECT_CLASS_TYPE(klass);
 
-    g_mutex_init(&klass->mutex);
+    gbinder_servicemanager_class_common_init(klass);
     g_type_class_add_private(klass, sizeof(GBinderServiceManagerPriv));
     object_class->dispose = gbinder_servicemanager_dispose;
     object_class->finalize = gbinder_servicemanager_finalize;
