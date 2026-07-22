@@ -1,3 +1,11 @@
+libgbinder (1.1.51) unstable; urgency=low
+
+  * Added support for AIDL registration notifications
+  * Droped (broken?) gbinder_servicemanager_aidl4
+  * Moved tools into a separate directory
+
+ -- Slava Monich <slava.monich@jolla.com>  Wed, 22 Jul 2026 04:07:29 +0300
+
 libgbinder (1.1.50) unstable; urgency=low
 
   * Fixed proxy issues
