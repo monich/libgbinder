@@ -86,6 +86,7 @@ typedef struct service_manager_aidl5 {
     GBinderLocalObject parent;
     GHashTable* objects;
     GMutex mutex;
+    gboolean return_service;
 } ServiceManagerAidl5;
 
 #define SERVICE_MANAGER_AIDL5_TYPE (service_manager_aidl5_get_type())
@@ -127,7 +128,29 @@ servicemanager_aidl5_handler(
 
             gbinder_local_reply_init_writer(reply, &writer);
             gbinder_writer_append_int32(&writer, GBINDER_STATUS_OK);
-            gbinder_writer_append_remote_object(&writer, remote_obj);
+            if (self->return_service) {
+                GBinderWriter parcel;
+
+                /* union Service {
+                 *     ServiceWithMetadata serviceWithMetadata;
+                 *     @nullable IBinder accessor;
+                 *  }
+                 *
+                 * parcelable ServiceWithMetadata {
+                 *     @nullable IBinder service;
+                 *     boolean isLazyService;
+                 * }
+                 */
+                gbinder_writer_append_int32(&writer, 0);
+                gbinder_writer_append_int32(&writer, 0); /* Tag */
+                gbinder_writer_start_parcelable(&writer, &parcel);
+                gbinder_writer_append_remote_object(&parcel, remote_obj);
+                gbinder_writer_append_bool(&parcel, FALSE);
+                gbinder_writer_finish_parcelable(&parcel);
+            } else {
+                /* Just IBinder */
+                gbinder_writer_append_remote_object(&writer, remote_obj);
+            }
             if (remote_obj) {
                 GDEBUG("Found name '%s' => %p", str, remote_obj);
             } else {
@@ -251,13 +274,15 @@ service_manager_aidl5_class_init(
 static
 ServiceManagerAidl5*
 servicemanager_aidl5_new(
-    const char* dev)
+    const char* dev,
+    gboolean return_service)
 {
     ServiceManagerAidl5* self = g_object_new(SERVICE_MANAGER_AIDL5_TYPE, NULL);
     GBinderLocalObject* obj = GBINDER_LOCAL_OBJECT(self);
     GBinderIpc* ipc = gbinder_ipc_new(dev, NULL);
     const int fd = gbinder_driver_fd(ipc->driver);
 
+    self->return_service = return_service;
     gbinder_local_object_init_base(obj, ipc, servicemanager_aidl_ifaces,
         NULL, NULL);
     test_binder_register_object(fd, obj, SVCMGR_HANDLE);
@@ -283,7 +308,8 @@ typedef struct test_context {
 static
 void
 test_context_init(
-    TestContext* test)
+    TestContext* test,
+    gboolean return_service)
 {
     const char* dev = GBINDER_DEFAULT_BINDER;
     const char* config =
@@ -307,7 +333,7 @@ test_context_init(
     test->fd = gbinder_driver_fd(ipc->driver);
     test->object = gbinder_local_object_new(ipc, NULL, NULL, NULL);
     test_binder_register_object(test->fd, test->object, AUTO_HANDLE);
-    test->service = servicemanager_aidl5_new(dev);
+    test->service = servicemanager_aidl5_new(dev, return_service);
     test->client = gbinder_servicemanager_new(dev);
     test->loop = g_main_loop_new(NULL, FALSE);
     gbinder_ipc_unref(ipc);
@@ -360,13 +386,14 @@ test_context_wait_ref(
 
 static
 void
-test_get_run()
+test_get_run(
+    gconstpointer param)
 {
     TestContext test;
     const char* name = "name";
     int status = -1;
 
-    test_context_init(&test);
+    test_context_init(&test, GPOINTER_TO_INT(param));
 
     /* Query the object (it's not there yet) */
     GDEBUG("Querying '%s'", name);
@@ -396,9 +423,10 @@ test_get_run()
 
 static
 void
-test_get()
+test_get(
+    gconstpointer param)
 {
-    test_run_in_context(&test_opt, test_get_run);
+    test_run_in_context_param(&test_opt, test_get_run, param);
 }
 
 /*==========================================================================*
@@ -413,7 +441,7 @@ test_list_run()
     const char* name = "name";
     char** list;
 
-    test_context_init(&test);
+    test_context_init(&test, FALSE);
 
     /* Request the list */
     list = gbinder_servicemanager_list_sync(test.client);
@@ -461,7 +489,8 @@ int main(int argc, char* argv[])
     g_type_init();
     G_GNUC_END_IGNORE_DEPRECATIONS;
     g_test_init(&argc, &argv, NULL);
-    g_test_add_func(TEST_("get"), test_get);
+    g_test_add_data_func(TEST_("get/1"), GINT_TO_POINTER(0), test_get);
+    g_test_add_data_func(TEST_("get/2"), GINT_TO_POINTER(1), test_get);
     g_test_add_func(TEST_("list"), test_list);
     test_init(&test_opt, argc, argv);
     return g_test_run();
