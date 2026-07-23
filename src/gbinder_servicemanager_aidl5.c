@@ -140,6 +140,7 @@ gbinder_servicemanager_aidl5_class_init(
 {
     GBinderServiceManagerClass* manager = GBINDER_SERVICEMANAGER_CLASS(klass);
 
+    gbinder_servicemanager_class_common_init(manager);
     manager->get_service = gbinder_servicemanager_aidl5_get_service;
 
     klass->check_service_transaction = AIDL5_CHECK_SERVICE_TRANSACTION;

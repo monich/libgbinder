@@ -574,6 +574,7 @@ gbinder_servicemanager_aidl_class_init(
     GBinderServiceManagerClass* manager = GBINDER_SERVICEMANAGER_CLASS(klass);
     GObjectClass* object = G_OBJECT_CLASS(klass);
 
+    gbinder_servicemanager_class_common_init(manager);
     g_type_class_add_private(klass, sizeof(GBinderServiceManagerAidlPriv));
 
     klass->check_service_transaction = CHECK_SERVICE_TRANSACTION;

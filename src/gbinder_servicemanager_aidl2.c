@@ -84,6 +84,9 @@ void
 gbinder_servicemanager_aidl2_class_init(
     GBinderServiceManagerAidl2Class* klass)
 {
+    GBinderServiceManagerClass* manager = GBINDER_SERVICEMANAGER_CLASS(klass);
+
+    gbinder_servicemanager_class_common_init(manager);
     klass->list_services_req = gbinder_servicemanager_aidl2_list_services_req;
     klass->add_service_req = gbinder_servicemanager_aidl2_add_service_req;
 }

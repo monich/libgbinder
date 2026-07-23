@@ -98,6 +98,11 @@ gbinder_servicemanager_service_registered(
     const char* name)
     GBINDER_INTERNAL;
 
+void
+gbinder_servicemanager_class_common_init(
+    GBinderServiceManagerClass* klass)
+    GBINDER_INTERNAL;
+
 /* Declared for unit tests */
 void
 gbinder_servicemanager_exit(
