@@ -1,3 +1,10 @@
+libgbinder (1.1.52) unstable; urgency=low
+
+  * Support both checkService variants for Android 15
+  * Prevent reuse of servicemanager instance table
+
+ -- Slava Monich <slava.monich@jolla.com>  Thu, 23 Jul 2026 17:55:23 +0300
+
 libgbinder (1.1.51) unstable; urgency=low
 
   * Added support for AIDL registration notifications
